@@ -36,6 +36,10 @@ import {
 	hasStyluaConfig,
 	hasVitePlusConfig,
 } from "./tool-policy.js";
+import {
+	resolveKotlinFormatter,
+	resolveKotlinFormatterStyle,
+} from "./settings.js";
 
 const _lazyInstallAttempts = new Set<string>();
 
@@ -612,6 +616,21 @@ export const ktlintFormatter: FormatterInfo = {
 	},
 };
 
+export const ktfmtFormatter: FormatterInfo = {
+	name: "ktfmt",
+	command: ["ktfmt", "--kotlinlang-style", "$FILE"],
+	extensions: [".kt", ".kts"],
+	async resolveCommand(filePath, _cwd) {
+		const inPath = await which("ktfmt");
+		if (!inPath) return null;
+		const style = resolveKotlinFormatterStyle();
+		return [inPath, `--${style}`, filePath];
+	},
+	async detect(_cwd: string) {
+		return (await which("ktfmt")) !== null;
+	},
+};
+
 export const rubocopFormatter: FormatterInfo = {
 	name: "rubocop",
 	command: ["rubocop", "-a", "--no-color", "$FILE"],
@@ -839,6 +858,7 @@ const ALL_FORMATTERS: FormatterInfo[] = [
 	ocamlformatFormatter,
 	clangFormatFormatter,
 	ktlintFormatter,
+	ktfmtFormatter,
 	terraformFormatter,
 	phpCsFixerFormatter,
 	csharpierFormatter,
@@ -885,7 +905,12 @@ export async function getFormattersForFile(
 	// Detect formatters for this extension
 	const matching = ALL_FORMATTERS.filter((f) => f.extensions.includes(ext));
 	const formatterPolicy = getFormatterPolicyForFile(filePath);
-	const smartDefaultFormatterName = getSmartDefaultFormatterName(filePath);
+	let smartDefaultFormatterName = getSmartDefaultFormatterName(filePath);
+
+	// Kotlin: allow settings/flags to override the default formatter
+	if (ext === ".kt" || ext === ".kts") {
+		smartDefaultFormatterName = resolveKotlinFormatter();
+	}
 
 	const candidateFormatters = formatterPolicy?.formatterNames?.length
 		? matching.filter((f) => formatterPolicy.formatterNames.includes(f.name))
@@ -931,6 +956,16 @@ export async function getFormattersForFile(
 				// pi-lens-ignore: missing-error-propagation — optional formatter detection, skip on failure
 				console.error(`[format] Detection failed for ${formatter.name}:`, err);
 			}
+		}
+	}
+
+	// Kotlin fallback: if the configured formatter isn't available, try the other one
+	if (!selected && (ext === ".kt" || ext === ".kts")) {
+		const fallbackName =
+			resolveKotlinFormatter() === "ktfmt" ? "ktlint" : "ktfmt";
+		const fallback = candidateFormatters.find((f) => f.name === fallbackName);
+		if (fallback && (await fallback.detect(cwd))) {
+			selected = fallback;
 		}
 	}
 

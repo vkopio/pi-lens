@@ -21,6 +21,7 @@ import {
 	blackFormatter,
 	clearFormatterRuntimeState,
 	getFormattersForFile,
+	ktfmtFormatter,
 	oxfmtFormatter,
 	phpCsFixerFormatter,
 	prettierFormatter,
@@ -28,6 +29,11 @@ import {
 	ruffFormatter,
 	standardrbFormatter,
 } from "../../clients/formatters.ts";
+import {
+	clearPiLensSettingsCache,
+	setKotlinFormatterOverride,
+	setKotlinFormatterStyleOverride,
+} from "../../clients/settings.ts";
 import { createTempFile, setupTestEnvironment } from "./test-utils.js";
 
 // ---------------------------------------------------------------------------
@@ -424,6 +430,52 @@ describe("getFormattersForFile — policy selection", () => {
 			const formatters = await getFormattersForFile(filePath, tmpDir);
 			expect(formatters.map((f) => f.name)).toEqual(["ktlint"]);
 		});
+	});
+
+	it("uses ktfmt for Kotlin files when override is set and ktfmt is on PATH", async () => {
+		clearPiLensSettingsCache();
+		setKotlinFormatterOverride("ktfmt");
+		await withPathShim("ktfmt", async () => {
+			const filePath = fileIn(tmpDir, "App.kt");
+			const formatters = await getFormattersForFile(filePath, tmpDir);
+			expect(formatters.map((f) => f.name)).toEqual(["ktfmt"]);
+		});
+		setKotlinFormatterOverride(undefined);
+		clearPiLensSettingsCache();
+	});
+
+	it("falls back to ktlint when ktfmt is configured but unavailable", async () => {
+		clearPiLensSettingsCache();
+		setKotlinFormatterOverride("ktfmt");
+		await withPathShim("ktlint", async () => {
+			const filePath = fileIn(tmpDir, "App.kt");
+			const formatters = await getFormattersForFile(filePath, tmpDir);
+			expect(formatters.map((f) => f.name)).toEqual(["ktlint"]);
+		});
+		setKotlinFormatterOverride(undefined);
+		clearPiLensSettingsCache();
+	});
+
+	it("ktfmt resolveCommand uses the configured style preset", async () => {
+		clearPiLensSettingsCache();
+		setKotlinFormatterStyleOverride("google-style");
+		const shimDir = path.join(tmpDir, "shims");
+		const exeName = isWin ? "ktfmt.cmd" : "ktfmt";
+		makeFakeExe(path.join(shimDir, exeName));
+		const origPath = process.env.PATH;
+		process.env.PATH = `${shimDir}${path.delimiter}${origPath}`;
+		try {
+			const filePath = fileIn(tmpDir, "App.kt");
+			const cmd = await ktfmtFormatter.resolveCommand!(filePath, tmpDir);
+			expect(cmd).not.toBeNull();
+			expect(cmd![0]).toContain("ktfmt");
+			expect(cmd).toContain("--google-style");
+			expect(cmd).toContain(filePath);
+		} finally {
+			process.env.PATH = origPath;
+			setKotlinFormatterStyleOverride(undefined);
+			clearPiLensSettingsCache();
+		}
 	});
 
 	it("uses swiftformat as the smart default for Swift files when available", async () => {

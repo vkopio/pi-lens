@@ -76,6 +76,11 @@ import {
 	resolveSemgrepConfig,
 	savePiLensSemgrepConfig,
 } from "./clients/semgrep-config.js";
+import {
+	clearPiLensSettingsCache,
+	setKotlinFormatterOverride,
+	setKotlinFormatterStyleOverride,
+} from "./clients/settings.js";
 import { TreeSitterClient } from "./clients/tree-sitter-client.js";
 import { handleBooboo } from "./commands/booboo.js";
 import { initI18n, t } from "./i18n.js";
@@ -462,6 +467,36 @@ export default function (pi: ExtensionAPI) {
 			? undefined
 			: pi.getFlag(name);
 		return resolvePiLensFlag(name, cliValue, globalConfig);
+	}
+
+	// Kotlin formatter flags
+	pi.registerFlag("lens-kotlin-formatter", {
+		description:
+			"Preferred Kotlin formatter: ktlint (default) or ktfmt. Overrides settings.json.",
+		type: "string",
+		default: "",
+	});
+
+	pi.registerFlag("lens-kotlin-style", {
+		description:
+			"ktfmt style preset: kotlinlang-style (default), dropbox-style, or google-style. Overrides settings.json.",
+		type: "string",
+		default: "",
+	});
+
+	// Apply Kotlin formatter overrides from CLI flags so the formatter
+	// pipeline (which does not have access to pi.getFlag) respects them.
+	{
+		const formatterFlag = pi.getFlag("lens-kotlin-formatter");
+		const styleFlag = pi.getFlag("lens-kotlin-style");
+		if (typeof formatterFlag === "string" && formatterFlag) {
+			setKotlinFormatterOverride(formatterFlag as "ktlint" | "ktfmt");
+		}
+		if (typeof styleFlag === "string" && styleFlag) {
+			setKotlinFormatterStyleOverride(
+				styleFlag as "kotlinlang-style" | "dropbox-style" | "google-style",
+			);
+		}
 	}
 
 	let lensEnabled = !getLensFlag("no-lens");
@@ -1021,6 +1056,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", async (event, ctx) => {
 		try {
 			dbg("session_start fired");
+			clearPiLensSettingsCache();
 			updateRuntimeIdentityFromEvent(event);
 			try {
 				await ensureLSPConfigInitialized(ctx.cwd ?? process.cwd());

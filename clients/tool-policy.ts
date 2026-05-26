@@ -233,7 +233,7 @@ const FORMATTER_POLICY_BY_EXTENSION = new Map<string, FormatterPolicy>([
 	[
 		".kt",
 		{
-			formatterNames: ["ktlint"],
+			formatterNames: ["ktlint", "ktfmt"],
 			defaultFormatter: "ktlint",
 			defaultWhenUnconfigured: true,
 			gate: "smart-default",
@@ -242,7 +242,7 @@ const FORMATTER_POLICY_BY_EXTENSION = new Map<string, FormatterPolicy>([
 	[
 		".kts",
 		{
-			formatterNames: ["ktlint"],
+			formatterNames: ["ktlint", "ktfmt"],
 			defaultFormatter: "ktlint",
 			defaultWhenUnconfigured: true,
 			gate: "smart-default",
@@ -1006,6 +1006,13 @@ const TOOL_COMMAND_SPECS = new Map<string, ToolCommandSpec>([
 			windowsExt: ".exe",
 			versionArgs: ["--version"],
 			managedToolId: "ktlint",
+		},
+	],
+	[
+		"ktfmt",
+		{
+			command: "ktfmt",
+			versionArgs: ["--version"],
 		},
 	],
 	[
